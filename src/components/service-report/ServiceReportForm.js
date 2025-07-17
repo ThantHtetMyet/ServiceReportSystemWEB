@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   Box,
   TextField,
@@ -9,40 +10,275 @@ import {
 } from '@mui/material';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
 import { LocalizationProvider, DateTimePicker } from '@mui/x-date-pickers';
+import { useNavigate } from 'react-router-dom';
+import CustomModal from '../common/CustomModal';
+const API_BASE_URL = 'https://localhost:7263/api';
 
 const ServiceReportForm = () => {
+  const navigate = useNavigate();
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const { user } = useAuth();
   const [formData, setFormData] = useState({
     customer: '',
     contactNo: '',
-    projectNo: '',
-    system: '',
-    location: '',
-    followUpAction: '',
+    projectNo: { id: '', displayValue: '' },
+    system: { id: '', displayValue: '' },
+    location: { id: '', displayValue: '' },
+    followUpAction: { id: '', displayValue: '' },  
+    serviceTypes: [{ id: '', displayValue: '' }], // Changed to array
+    formStatusID: '',
     failureDetectedTime: null,
     responseTime: null,
     arrivalTime: null,
     completionTime: null,
-    typeOfService: '',
-    issueReported: '',
-    issueFound: '',
-    actionTaken: '',
-    furtherAction: '',
-    formStatus: '',
+    issueReported: { id: '', displayValue: '' },
+    issueFound: { id: '', displayValue: '' },
+    actionTaken: { id: '', displayValue: '' },
+    furtherAction: { id: '', displayValue: '' },
+    formStatus: { id: '', displayValue: '' },
+    jobNumber: '',
+    // Remark fields
+    serviceTypeRemark: '',
+    issueReportedRemark: '',
+    issueFoundRemark: '',
+    actionTakenRemark: '',
+    furtherActionRemark: '',
+    formStatusRemark: ''
   });
 
+  const getSelectProps = (fieldName) => ({
+    displayEmpty: true,
+    renderValue: (selected) => {
+      if (!selected) return 'Select an option';
+      return formData[fieldName]?.displayValue || 'Select an option';
+    },
+    MenuProps: {
+      PaperProps: {
+        style: {
+          maxHeight: 300
+        }
+      }
+    }
+  });
+
+  const [isLoading, setIsLoading] = useState(true);
+
+  const [dropdownData, setDropdownData] = useState({
+    projectNos: [],
+    systems: [],
+    locations: [],
+    followupActions: [],
+    issueReports: [],
+    issueFindings: [],
+    actionsTaken: [],
+    furtherActions: [],
+    formStatuses: [],
+    serviceTypes: [],
+    issueFound: [],
+    issueReport: [],
+    actionTaken: [],
+    furtherActionTaken: [],
+    formStatus: []
+  });
+
+  useEffect(() => {
+    const fetchDropdownData = async () => {
+      try {
+        const [projectNosRes, systemsRes, locationsRes, followupActionsRes, serviceTypesRes,
+              issueReportRes, issueFoundRes, actionTakenRes, furtherActionRes, formStatusRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/ProjectNoWarehouse`),
+          fetch(`${API_BASE_URL}/SystemWarehouse`),
+          fetch(`${API_BASE_URL}/LocationWarehouse`),
+          fetch(`${API_BASE_URL}/FollowupActionWarehouse`),
+          fetch(`${API_BASE_URL}/ServiceTypeWarehouse`),
+          fetch(`${API_BASE_URL}/IssueReportWarehouse`),
+          fetch(`${API_BASE_URL}/IssueFoundWarehouse`),
+          fetch(`${API_BASE_URL}/ActionTakenWarehouse`),
+          fetch(`${API_BASE_URL}/FurtherActionTakenWarehouse`),
+          fetch(`${API_BASE_URL}/FormStatusWarehouse`)
+        ]);
+        
+        const responses = await Promise.all([
+          projectNosRes.json(),
+          systemsRes.json(),
+          locationsRes.json(),
+          followupActionsRes.json(),
+          serviceTypesRes.json(),
+          issueReportRes.json(),
+          issueFoundRes.json(),
+          actionTakenRes.json(),
+          furtherActionRes.json(),
+          formStatusRes.json()
+        ]);
+
+        const [projectNos, systems, locations, followupActions, serviceTypes,
+              issueReports, issueFindings, actionsTaken, furtherActions, formStatuses] = responses.map(response => 
+          Array.isArray(response) ? response : []
+        );
+
+        setDropdownData({
+          projectNos,
+          systems,
+          locations,
+          followupActions,
+          serviceTypes,
+          issueReports,
+          issueFindings,
+          actionsTaken,
+          furtherActions,
+          formStatuses
+        });
+      } catch (error) {
+        console.error('Error fetching dropdown data:', error);
+      }
+    };
+
+        const fetchNextJobNumber = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/ServiceReport/NextJobNumber`);
+        if (response.ok) {
+          const data = await response.json();
+          setFormData(prev => ({ ...prev, jobNumber: data.jobNumber }));
+        }
+      } catch (error) {
+        console.error('Error fetching job number:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchNextJobNumber();
+    
+    fetchDropdownData();
+  }, []);
+
   const handleChange = (field) => (event) => {
-    setFormData({ ...formData, [field]: event.target.value });
+      const selectedId = event.target.value;
+      let displayValue = '';
+      
+      // Find the display value based on the field type
+      switch(field) {
+        case 'projectNo':
+          displayValue = dropdownData.projectNos.find(item => item.id === selectedId)?.projectNumber || '';
+          break;
+        case 'system':
+          displayValue = dropdownData.systems.find(item => item.id === selectedId)?.name || '';
+          break;
+        case 'location':
+          displayValue = dropdownData.locations.find(item => item.id === selectedId)?.name || '';
+          break;
+        case 'followUpAction':
+          displayValue = dropdownData.followupActions.find(item => item.id === selectedId)?.followupActionNo || '';
+          break;
+        case 'serviceTypes':
+          displayValue = dropdownData.serviceTypes.find(item => item.id === selectedId)?.name || '';
+          break;
+        case 'issueReported':
+          displayValue = dropdownData.issueReports.find(item => item.id === selectedId)?.name || '';
+          break;
+        case 'issueFound':
+          displayValue = dropdownData.issueFindings.find(item => item.id === selectedId)?.name || '';
+          break;
+        case 'actionTaken':
+          displayValue = dropdownData.actionsTaken.find(item => item.id === selectedId)?.name || '';
+          break;
+        case 'furtherAction':
+          displayValue = dropdownData.furtherActions.find(item => item.id === selectedId)?.name || '';
+          break;
+        case 'formStatus':
+          displayValue = dropdownData.formStatuses.find(item => item.id === selectedId)?.name || '';
+          break;
+        case 'serviceTypeRemark':
+        case 'issueReportedRemark':
+        case 'issueFoundRemark':
+        case 'actionTakenRemark':
+        case 'furtherActionRemark':
+        case 'customer':
+        case 'formStatusRemark':
+          setFormData({
+            ...formData,
+            [field]: event.target.value
+          });
+          return;
+        default:
+          setFormData({ ...formData, [field]: event.target.value });
+          return;
+      }
+      
+      setFormData({
+        ...formData,
+        [field]: { id: selectedId, displayValue }
+      });
   };
 
   const handleDateChange = (field) => (value) => {
     setFormData({ ...formData, [field]: value });
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
-    console.log('Form submitted:', formData);
+    try {
+        const requestData = {
+            customer: formData.customer, 
+            projectNoID: formData.projectNo.id, // Remove parseInt
+            systemID: formData.system.id, // Remove parseInt
+            locationID: formData.location.id, // Remove parseInt
+            followupActionID: formData.followUpAction.id, // Remove parseInt
+            failureDetectedDate: formData.failureDetectedTime?.toISOString(),
+            responseDate: formData.responseTime?.toISOString(),
+            arrivalDate: formData.arrivalTime?.toISOString(),
+            completionDate: formData.completionTime?.toISOString(),
+            serviceType: [{ // Changed to array with id and remark
+                id: formData.serviceTypes.id || null,
+                remark: formData.serviceTypeRemark
+            }],
+            formStatus: [{ // Changed to array with id and remark
+                id: formData.formStatus.id || null,
+                remark: formData.formStatusRemark
+            }],
+            issueReported: [{
+                id: formData.issueReported.id || null, // Remove parseInt, handle null case
+                remark: formData.issueReportedRemark
+            }],
+            issueFound: [{
+                id: formData.issueFound.id || null, // Remove parseInt, handle null case
+                remark: formData.issueFoundRemark
+            }],
+            actionTaken: [{
+                id: formData.actionTaken.id || null, // Remove parseInt, handle null case
+                remark: formData.actionTakenRemark
+            }],
+            furtherAction: [{
+                id: formData.furtherAction.id || null, // Remove parseInt, handle null case
+                remark: formData.furtherActionRemark
+            }],
+            createdBy: user.id // This should already be a GUID string
+        };
+  
+      const response = await fetch(`${API_BASE_URL}/ServiceReport`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestData)
+      });
+  
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to submit form');
+      }
+  
+      const result = await response.json();
+      setFormData(prev => ({ ...prev, jobNumber: result.jobNumber }));
+      setShowSuccessModal(true); // Show success modal
+    } catch (error) {
+      console.error('Error submitting form:', error);
+    }
   };
-  const selectOptions = ['Option 1', 'Option 2', 'Option 3', 'Other'];
+  const handleModalClose = () => {
+      setShowSuccessModal(false);
+      navigate('/service-reports'); // Navigate to the list page
+  };
 
   const labelWidth = 140;
   const fieldWidth = 220;
@@ -96,22 +332,6 @@ const ServiceReportForm = () => {
     }
   };
 
-  const selectProps = {
-    displayEmpty: true,
-    renderValue: (value) => value || 'Select an option',
-    MenuProps: {
-      PaperProps: {
-        sx: {
-          maxHeight: 300,
-          '& .MuiMenuItem-root': {
-            ...commonStyles,
-            padding: '8px 16px'
-          }
-        }
-      }
-    }
-  };
-
   // Update table row spacing
   const tableRowStyles = {
     height: '60px' // Consistent height for all rows
@@ -124,6 +344,12 @@ const ServiceReportForm = () => {
 
   return (
     <LocalizationProvider dateAdapter={AdapterMoment}>
+      <CustomModal
+        open={showSuccessModal}
+        onClose={handleModalClose}
+        title="Success"
+        message="Service report created successfully!"
+      />
       <Box sx={{ 
         p: 3, 
         maxWidth: containerWidth, // Updated to containerWidth
@@ -155,30 +381,31 @@ const ServiceReportForm = () => {
             >
               Service Report
             </Typography>
-            <Box sx={{ 
-              position: 'absolute',
-              right: 0,
-              top: 0,
-              display: 'flex', 
-              alignItems: 'center' 
-            }}>
-              <Typography sx={{ mr: 2 }}>FormID:</Typography>
-              <TextField
-                value="SR001" // Replace with actual form ID
-                size="small"
-                InputProps={{
-                  readOnly: true,
-                  sx: {
-                    bgcolor: '#f8fafc',
-                    '& .MuiInputBase-input': {
-                      color: '#64748b',
-                      fontWeight: 500
+             <Box sx={{ 
+                position: 'absolute',
+                right: 0,
+                top: 0,
+                display: 'flex', 
+                alignItems: 'center' 
+              }}>
+                <Typography sx={{ mr: 2 }}>Job No:</Typography>
+                <TextField
+                  value={isLoading ? 'Loading...' : (formData.jobNumber || 'N/A')}
+                  size="small"
+                  InputProps={{
+                    readOnly: true,
+                    sx: {
+                      bgcolor: '#f8fafc',
+                      '& .MuiInputBase-input': {
+                        color: isLoading ? '#94a3b8' : '#64748b',
+                        fontWeight: 500,
+                        fontStyle: isLoading ? 'italic' : 'normal'
+                      }
                     }
-                  }
-                }}
-                sx={{ width: '120px' }}
-              />
-            </Box>
+                  }}
+                  sx={{ width: '120px' }}
+                />
+              </Box>
           </Box>
 
           <Box sx={{ p: 3, backgroundColor: '#fafafa', borderRadius: '4px', border: '1px solid #ccc' }}>
@@ -212,16 +439,19 @@ const ServiceReportForm = () => {
                 <td style={{ width: columnWidth }}>
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     <Typography sx={{ width: labelWidth }}>Project No:</Typography>
+                    
                     <TextField
                       select
-                      value={formData.projectNo}
+                      value={formData.projectNo.id}
                       onChange={handleChange('projectNo')}
                       size="small"
                       sx={selectFieldStyles}
-                      SelectProps={selectProps}
+                      SelectProps={getSelectProps('projectNo')}
                     >
-                      {selectOptions.map((opt) => (
-                        <MenuItem key={opt} value={opt}>{opt}</MenuItem>
+                      {dropdownData.projectNos.map((project) => (
+                        <MenuItem key={project.id} value={project.id}>
+                          {project.projectNumber}
+                        </MenuItem>
                       ))}
                     </TextField>
                   </Box>
@@ -233,16 +463,19 @@ const ServiceReportForm = () => {
                 <td style={{ width: columnWidth }}>
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     <Typography sx={{ width: labelWidth }}>System:</Typography>
+                    
                     <TextField
                       select
-                      value={formData.system}
+                      value={formData.system.id}
                       onChange={handleChange('system')}
                       size="small"
                       sx={selectFieldStyles}
-                      SelectProps={selectProps}
+                      SelectProps={getSelectProps('system')}
                     >
-                      {selectOptions.map((opt) => (
-                        <MenuItem key={opt} value={opt}>{opt}</MenuItem>
+                      {dropdownData.systems.map((system) => (
+                        <MenuItem key={system.id} value={system.id}>
+                          {system.name}
+                        </MenuItem>
                       ))}
                     </TextField>
                   </Box>
@@ -250,16 +483,20 @@ const ServiceReportForm = () => {
                 <td style={{ width: columnWidth }}>
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     <Typography sx={{ width: labelWidth }}>Location:</Typography>
+                    
                     <TextField
                       select
-                      value={formData.location}
+                      name="location" 
+                      value={formData.location.id}
                       onChange={handleChange('location')}
                       size="small"
                       sx={selectFieldStyles}
-                      SelectProps={selectProps}
+                      SelectProps={getSelectProps('location')}
                     >
-                      {selectOptions.map((opt) => (
-                        <MenuItem key={opt} value={opt}>{opt}</MenuItem>
+                      {dropdownData.locations.map((location) => (
+                        <MenuItem key={location.id} value={location.id}>
+                          {location.name}
+                        </MenuItem>
                       ))}
                     </TextField>
                   </Box>
@@ -271,15 +508,17 @@ const ServiceReportForm = () => {
                     </Box>
                     <TextField
                       select
-                      value={formData.followUpAction}
+                      value={formData.followUpAction?.id || ''}
                       onChange={handleChange('followUpAction')}
                       size="small"
                       sx={selectFieldStyles}
-                      SelectProps={selectProps}
+                      SelectProps={getSelectProps('followUpAction')}
                     >
-                      {selectOptions.map((opt) => (
-                        <MenuItem key={opt} value={opt}>{opt}</MenuItem>
-                      ))}
+                      {dropdownData.followupActions?.map((action) => (
+                        <MenuItem key={action.id} value={action.id}>
+                          {action.followupActionNo}
+                        </MenuItem>
+                      )) || []}
                     </TextField>
                   </Box>
                 </td>
@@ -368,20 +607,41 @@ const ServiceReportForm = () => {
                 <tr>
                   <td style={{ width: columnWidth }}>
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <Typography sx={{ width: labelWidth }}>Type of Service:</Typography>
+                    <Typography sx={{ width: labelWidth }}>Type of Service:</Typography>
+                    <TextField
+                      select
+                      value={formData.serviceTypes.id}
+                      onChange={handleChange('serviceTypes')}
+                      size="small"
+                      sx={{
+                        width: '400px',
+                        '& .MuiSelect-select': {
+                          whiteSpace: 'normal',
+                          wordWrap: 'break-word',
+                          minHeight: '30px'
+                        },
+                        '& .MuiMenuItem-root': {
+                          whiteSpace: 'normal',
+                          wordWrap: 'break-word',
+                          minHeight: '48px',
+                          padding: '8px 16px'
+                        }
+                      }}
+                      SelectProps={getSelectProps('serviceTypes')}
+                    >
+                      {dropdownData.serviceTypes.map((type) => (
+                        <MenuItem key={type.id} value={type.id}>
+                          {type.name}
+                        </MenuItem>
+                      ))}
+                    </TextField>
                       <TextField
-                        select
-                        value={formData.typeOfService}
-                        onChange={handleChange('typeOfService')}
+                        value={formData.serviceTypeRemark}
+                        onChange={handleChange('serviceTypeRemark')}
                         size="small"
-                        sx={selectFieldStyles}
-                        SelectProps={selectProps}
-                      >
-                        {selectOptions.map((opt) => (
-                          <MenuItem key={opt} value={opt}>{opt}</MenuItem>
-                        ))}
-                      </TextField>
-                    </Box>
+                        sx={{ ...textFieldStyles, marginLeft: '16px' }}
+                      />
+                  </Box>
                   </td>
                 </tr>
               </tbody>
@@ -409,18 +669,34 @@ const ServiceReportForm = () => {
                       <Typography sx={{ width: labelWidth }}>Issue Reported:</Typography>
                       <TextField
                         select
-                        value={formData.issueReported}
+                        value={formData.issueReported.id}
                         onChange={handleChange('issueReported')}
+                        SelectProps={getSelectProps('issueReported')}
                         size="small"
-                        sx={selectFieldStyles}
-                        SelectProps={selectProps}
+                        sx={{
+                          width: '400px',
+                          '& .MuiSelect-select': {
+                            whiteSpace: 'normal',
+                            wordWrap: 'break-word',
+                            minHeight: '30px'
+                          },
+                          '& .MuiMenuItem-root': {
+                            whiteSpace: 'normal',
+                            wordWrap: 'break-word',
+                            minHeight: '48px',
+                            padding: '8px 16px'
+                          }
+                        }}
                       >
-                        {selectOptions.map((opt) => (
-                          <MenuItem key={opt} value={opt}>{opt}</MenuItem>
+                        {dropdownData.issueReports.map((issue) => (
+                          <MenuItem key={issue.id} value={issue.id}>
+                            {issue.name}
+                          </MenuItem>
                         ))}
                       </TextField>
                       <TextField
                         value={formData.issueReportedRemark}
+                        onChange={handleChange('issueReportedRemark')}
                         size="small"
                         sx={{ ...textFieldStyles, marginLeft: '16px' }}
                       />
@@ -433,20 +709,36 @@ const ServiceReportForm = () => {
                         <Typography sx={{ width: labelWidth }}>Issue Found:</Typography>
                         <TextField
                           select
-                          value={formData.issueFound}
+                          value={formData.issueFound.id}
                           onChange={handleChange('issueFound')}
                           size="small"
-                          sx={selectFieldStyles}
-                          SelectProps={selectProps}
+                          sx={{
+                            width: '400px',
+                            '& .MuiSelect-select': {
+                              whiteSpace: 'normal',
+                              wordWrap: 'break-word',
+                              minHeight: '30px'
+                            },
+                            '& .MuiMenuItem-root': {
+                              whiteSpace: 'normal',
+                              wordWrap: 'break-word',
+                              minHeight: '48px',
+                              padding: '8px 16px'
+                            }
+                          }}
+                          SelectProps={getSelectProps('issueFound')}
                         >
-                          {selectOptions.map((opt) => (
-                            <MenuItem key={opt} value={opt}>{opt}</MenuItem>
-                          ))}
+                        {dropdownData.issueFindings.map((issue) => (
+                          <MenuItem key={issue.id} value={issue.id}>
+                            {issue.name}
+                          </MenuItem>
+                        ))}
                         </TextField>
                         <TextField
-                        value={formData.issueFoundRemark}
-                        size="small"
-                        sx={{ ...textFieldStyles, marginLeft: '16px' }}
+                          value={formData.issueFoundRemark}
+                          onChange={handleChange('issueFoundRemark')}
+                          size="small"
+                          sx={{ ...textFieldStyles, marginLeft: '16px' }}
                         />
                       </Box>
                   </td>
@@ -457,7 +749,6 @@ const ServiceReportForm = () => {
           
           <Box sx={{ p: 3,mt:3, backgroundColor: '#fafafa', borderRadius: '4px', border: '1px solid #ccc' }}>
           {/* Action Taken Section */}
-          
           <table style={{ width: '100%', borderCollapse: 'collapse', borderSpacing: '0 16px' }} {...sectionSpacing}>
               <tbody>
                 <tr>
@@ -466,21 +757,37 @@ const ServiceReportForm = () => {
                   <Typography sx={{ width: labelWidth }}>Action Taken:</Typography>
                   <TextField
                     select
-                    value={formData.actionTaken}
+                    value={formData.actionTaken.id}
                     onChange={handleChange('actionTaken')}
                     size="small"
-                    sx={selectFieldStyles}
-                    SelectProps={selectProps}
-                  >
-                    {selectOptions.map((opt) => (
-                      <MenuItem key={opt} value={opt}>{opt}</MenuItem>
-                    ))}
+                          sx={{
+                            width: '400px',
+                            '& .MuiSelect-select': {
+                              whiteSpace: 'normal',
+                              wordWrap: 'break-word',
+                              minHeight: '30px'
+                            },
+                            '& .MuiMenuItem-root': {
+                              whiteSpace: 'normal',
+                              wordWrap: 'break-word',
+                              minHeight: '48px',
+                              padding: '8px 16px'
+                            }
+                          }}
+                          SelectProps={getSelectProps('actionTaken')}
+                      >
+                      {dropdownData.actionsTaken.map((actiondata) => (
+                          <MenuItem key={actiondata.id} value={actiondata.id}>
+                            {actiondata.name}
+                          </MenuItem>
+                      ))}
                   </TextField>
                   <TextField
                     value={formData.actionTakenRemark}
+                    onChange={handleChange('actionTakenRemark')}
                     size="small"
-                        sx={{ ...textFieldStyles, marginLeft: '16px' }}
-                    />
+                    sx={{ ...textFieldStyles, marginLeft: '16px' }}
+                  />
                   </Box>
                 </td>
                 </tr>
@@ -498,16 +805,37 @@ const ServiceReportForm = () => {
                     <Typography sx={{ width: labelWidth }}>Further Action To Be Taken:</Typography>
                     <TextField
                       select
-                      value={formData.furtherAction}
+                      value={formData.furtherAction.id}
                       onChange={handleChange('furtherAction')}
                       size="small"
-                      sx={selectFieldStyles}
-                      SelectProps={selectProps}
-                    >
-                      {selectOptions.map((opt) => (
-                        <MenuItem key={opt} value={opt}>{opt}</MenuItem>
+                      sx={{
+                        width: '400px',
+                        '& .MuiSelect-select': {
+                          whiteSpace: 'normal',
+                          wordWrap: 'break-word',
+                          minHeight: '30px'
+                        },
+                        '& .MuiMenuItem-root': {
+                          whiteSpace: 'normal',
+                          wordWrap: 'break-word',
+                          minHeight: '48px',
+                          padding: '8px 16px'
+                        }
+                      }}
+                      SelectProps={getSelectProps('furtherAction')}
+                      >
+                      {dropdownData.furtherActions.map((responsedata) => (
+                          <MenuItem key={responsedata.id} value={responsedata.id}>
+                            {responsedata.name}
+                          </MenuItem>
                       ))}
                     </TextField>
+                    <TextField
+                      value={formData.furtherActionRemark}
+                      onChange={handleChange('furtherActionRemark')}
+                      size="small"
+                      sx={{ ...textFieldStyles, marginLeft: '16px' }}
+                    />
                   </Box>
                 </td>
               </tr>
@@ -516,7 +844,7 @@ const ServiceReportForm = () => {
          </Box>
         
         <Box sx={{ p: 3,mt:3, backgroundColor: '#fafafa', borderRadius: '4px', border: '1px solid #ccc' }}>
-          {/* Further Action & Form Status */}
+          {/* Form Status */}
           <table style={{ width: '100%', borderCollapse: 'collapse' }} {...sectionSpacing}>
             <tbody>
               <tr>
@@ -525,16 +853,58 @@ const ServiceReportForm = () => {
                     <Typography sx={{ width: labelWidth }}>Form Status:</Typography>
                     <TextField
                       select
-                      value={formData.formStatus}
+                      value={formData.formStatus.id}
                       onChange={handleChange('formStatus')}
                       size="small"
-                      sx={selectFieldStyles}
-                      SelectProps={selectProps}
+                      sx={{
+                        width: '400px',
+                        '& .MuiSelect-select': {
+                          whiteSpace: 'normal',
+                          wordWrap: 'break-word',
+                          minHeight: '40px',
+                          padding: '8px 12px',
+                          display: 'flex',
+                          alignItems: 'center'
+                        },
+                        '& .MuiMenuItem-root': {
+                          whiteSpace: 'normal',
+                          wordWrap: 'break-word',
+                          minHeight: '40px',
+                          padding: '8px 12px',
+                          '&:hover': {
+                            backgroundColor: '#f0f0f0'
+                          },
+                          '&.Mui-selected': {
+                            backgroundColor: '#e3f2fd',
+                            '&:hover': {
+                              backgroundColor: '#bbdefb'
+                            }
+                          }
+                        },
+                        '& .MuiOutlinedInput-notchedOutline': {
+                          borderColor: '#bdbdbd'
+                        },
+                        '&:hover .MuiOutlinedInput-notchedOutline': {
+                          borderColor: '#757575'
+                        },
+                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                          borderColor: '#1976d2'
+                        }
+                      }}
+                      SelectProps={getSelectProps('formStatus')}
                     >
-                      {selectOptions.map((opt) => (
-                        <MenuItem key={opt} value={opt}>{opt}</MenuItem>
+                      {dropdownData.formStatuses.map((status) => (
+                        <MenuItem key={status.id} value={status.id}>
+                          {status.name}
+                        </MenuItem>
                       ))}
                     </TextField>
+                    <TextField
+                      value={formData.formStatusRemark}
+                      onChange={handleChange('formStatusRemark')}
+                      size="small"
+                      sx={{ ...textFieldStyles, marginLeft: '16px' }}
+                    />
                   </Box>
                 </td>
               </tr>
